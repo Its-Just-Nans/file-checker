@@ -327,7 +327,11 @@ def infosRead():
 def changeDataFile():
     newPathData = input('Put the name of the new file index\n')
     while not os.path.exists(newPathData) :
-        newPathData = input("Put the name of the new file index\n")
+        print('File does not exists, do you you want to create it ?')
+        if yesORno():
+            newIndex = open(newPathData, "w")
+        else:
+            newPathData = input("Put the name of the new file index\n")
     infosUpdate([['dataIndex', newPathData]])
     return newPathData
 
