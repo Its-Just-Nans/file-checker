@@ -4,6 +4,7 @@ import csv
 import time
 import datetime
 import shutil
+import json
 
 def SHAeur(path, rename):
     result = []
@@ -76,7 +77,6 @@ def SHAmulti(newPath):
     return hasheur.hexdigest()
 
 def readFile(nameOfFile):
-    #"C:\\Users\\Nextsourcia\\Desktop\\github\\tests\\python\\test.txt"
     file = open(nameOfFile, "r")
     fileRead = csv.reader(file, delimiter='#')
     for row in fileRead:
@@ -84,26 +84,54 @@ def readFile(nameOfFile):
     file.close()
 
 def writeFile(nameOfFile, tabToWrite):
-    #"C:\\Users\\Nextsourcia\\Desktop\\github\\tests\\python\\test.txt"
     file = open(nameOfFile, "a", newline="", encoding='utf-8')
     fileWrite = csv.writer(file, delimiter='#')
-    double = []
+    doublePath = []
+    doubleHash = []
+    allPath = getAllPath(nameOfFile)
     for row in tabToWrite:
-        if row[4] not in allHash:
-            fileWrite.writerow(row)
-            allHash.append(row[4])
-        else :
-            double.append(row)
+        if row[4] in allHash :
+            if row[0] in allPath:
+                pass
+                #here already exist
+            else:
+                fileWrite.writerow(row)
+                doublePath.append(row)
+        else:
+            if row[0] in allPath:
+                doubleHash.append(row)
+            else:
+                fileWrite.writerow(row)
+                allHash.append(row[4])
     file.close()
-    return double
+    return doublePath, doubleHash
+
+def getAllPath(nameOfFile):
+    allPath = []
+    try:
+        fileData = open(nameOfFile, "r")
+        fileRead = csv.reader(fileData, delimiter='#')
+        for row in fileRead:
+            allPath.append(row[0])
+        fileData.close()
+    except FileNotFoundError:
+        print('--------------dataFile not found')
+    except PermissionError:
+        print('--------------PermissionError in the file. Cannot read hash')
+    return allPath
 
 def getAllHash(nameOfFile):
-    file = open(nameOfFile, "r")
-    fileRead = csv.reader(file, delimiter='#')
     allHash = []
-    for row in fileRead:
-        allHash.append(row[4])
-    file.close()
+    try:
+        file = open(nameOfFile, "r")
+        fileRead = csv.reader(file, delimiter='#')
+        for row in fileRead:
+            allHash.append(row[4])
+        file.close()
+    except FileNotFoundError:
+        print('--------------dataFile not found')
+    except PermissionError:
+        print('--------------PermissionError in the file. Cannot read hash')
     return allHash
 
 def checkHash(allHash, hashFile):
@@ -208,33 +236,48 @@ def choice(index, text):
             choix = input()
     return choix
 
-def createIndex(dataFile, rename):
+def createIndex(dataFile, pathToCheck, rename):
     global allHash
     tabToSave = SHAeur(pathToCheck, rename)
-    doublons = writeFile(dataFile, tabToSave)
+    doublons, doubleHash = writeFile(dataFile, tabToSave)
     for doublon in doublons:
+        print(doublon)
+    for doublon in doubleHash:
         print(doublon)
     allHash = getAllHash(dataFile)
 
 def allFileExist(pathToDataFile):
     result = []
-    badHash =[]
+    badHash = []
+    doublons = []
+    localAllHash = []
     file = open(pathToDataFile, "r")
     fileRead = csv.reader(file, delimiter='#')
     for row in fileRead:
-        if os.path.exists(row[0]) :
-            if SHAmulti(row[0]) == row[4]:
-                continue
-            else :
+        #Check if there are same hash
+        if row[4] not in localAllHash:
+            localAllHash.append(row[4])
+        else :
+            doublons.append([row])
+        #Check if file exist
+        if os.path.exists(row[0]):
+            #check if hash is correct
+            if len(row[4]) == 64:
+                #if the hash havn't the good size, it is not good
+                if SHAmulti(row[0]) == row[4]:
+                    continue
+                else :
+                    badHash.append([row])
+            else:
                 badHash.append([row])
         else:
             #result.append([row[0], row[1], row[2], row[3], row[4]])
             result.append([row])
     file.close()
-    if len(result) == 0 and len(badHash) == 0 :
-        return True, True
+    if len(result) == 0 and len(badHash) == 0 and len(doublons) == 0 :
+        return True, True, True
     else :
-        return result, badHash
+        return result, badHash, doublons
 
 
 def getter(pathToDataFile, options):
@@ -260,92 +303,145 @@ def getter(pathToDataFile, options):
     dataFile.close()
     return res
 
+def infosUpdate(newData):
+    try :
+        allInfos = infosRead()
+    except ValueError:
+        allInfos = {}
+    except FileNotFoundError:
+        allInfos = {}
+    fileInfo = open("infos.json", "w")
+    for values in newData:
+        index = values[0]
+        valueToChange = values[1]
+        allInfos[index] = valueToChange
+    json.dump(allInfos, fileInfo)
+    fileInfo.close()
 
+def infosRead():
+    fileInfo = open("infos.json", "r")
+    data = json.load(fileInfo)
+    fileInfo.close()
+    return data
 
-allChoice = ['1', '2', '3', '4', '5', '6', '7', '42']
-textChoice = ['Check if a file is in the index', 'Create Directory index', 'Check the index' , 'Use the getter', 'Add files', 'Change working directory', 'Change index file', 'Leave']
-stop = False
-dataFile = "C:\\Users\\Nextsourcia\\Desktop\\github\\tests\\python\\test.txt"
-pathToCheck = "C:/Users/Nextsourcia/Desktop/DCIM/"
-while not stop:
-    print('--------------------')
-    print('<-- Working directory : "' + pathToCheck + '" -->')
-    print('<-- Index file : "' + dataFile + '" -->')
-    choix = choice(allChoice, textChoice)
+def changeDataFile():
+    newPathData = input('Put the name of the new file index\n')
+    while not os.path.exists(newPathData) :
+        newPathData = input("Put the name of the new file index\n")
+    infosUpdate([['dataIndex', newPathData]])
+    return newPathData
+
+def loadAllHash():
     global allHash
     if os.path.exists(dataFile) :
         allHash = getAllHash(dataFile)
         if len(allHash) == 0:
-            print('not access to the dataFile')
-            print('Do you want to generate it ?')
-            if yesORno():
-                createIndex(dataFile, pathToCheck, False)
-            else :
-                print('Index not generated')
+            print('No hash found')
     else :
-        print('not access to the dataFile')
-        print('Do you want to generate it ?')
-        if yesORno():
-            createIndex(dataFile, pathToCheck, False)
-        else :
-            print('Index not generated')
-    if choix == '1':
-        choixUser = choice(['1', '2'], ['Use a hash', 'Select a file'])
-        if choixUser == '1':
-            hashToCheck = input('Enter the Hash\n')
-            hashToCheck = '8af932a8866c771f694fa1r5fb36a052cf663843339de305b236a7cbf0f12139'
-            inDir = checkHash(allHash, hashToCheck)
-            print(hashToCheck + ' is in dir ? -> ' + str(inDir))
-        elif choixUser == '2':
-            fileToCheck = input('Enter the path to the file\n')
-            while not os.path.exists(fileToCheck) :
+        print('path to dataFile is incorrect')
+
+def changeDir():
+    newPathDir = input('Put the name of the directory\n')
+    while not os.path.exists(newPathDir) :
+        newPathDir = input("Put the name of the directory\n")
+    infosUpdate([['directory', newPathDir]])
+    return newPathDir
+
+allChoice = ['1', '2', '3', '4', '5', '6', '7', '42']
+textChoice = ['Check if a file is in the index', 'Create Directory index', 'Check the index' , 'Use the getter', 'Add files', 'Change working directory', 'Change index file', 'Leave']
+stop = False
+try :
+    allData = infosRead()
+    if allData['dataIndex'] != '':
+        dataFile = allData['dataIndex']
+    else:
+        pathToCheck = changeDir()
+    if allData['directory'] != '':
+        pathToCheck = allData['directory']
+    else:
+        dataFile = changeDataFile()
+except ValueError:
+    pathToCheck = changeDir()
+    dataFile = changeDataFile()
+except FileNotFoundError:
+    pathToCheck = changeDir()
+    dataFile = changeDataFile()
+
+global allHash
+
+while not stop:
+    try:
+        print('--------------------')
+        print('<-- Working directory : "' + pathToCheck + '" -->')
+        print('<-- Index file : "' + dataFile + '" -->\n')
+        choix = choice(allChoice, textChoice)
+        if choix == '1':
+            loadAllHash()
+            choixUser = choice(['1', '2'], ['Use a hash', 'Select a file'])
+            if choixUser == '1':
+                hashToCheck = input('Enter the Hash\n')
+                hashToCheck = '8af932a8866c771f694fa1r5fb36a052cf663843339de305b236a7cbf0f12139'
+                inDir = checkHash(allHash, hashToCheck)
+                print(hashToCheck + ' is in dir ? -> ' + str(inDir))
+            elif choixUser == '2':
                 fileToCheck = input('Enter the path to the file\n')
-            hashToCheck = SHAmulti(fileToCheck)
-            inDir = checkHash(allHash, hashToCheck)
-            print(hashToCheck + ' is in dir ? -> ' + str(inDir))
-    elif choix == '2':
-        createIndex(dataFile, pathToCheck, True)
-    elif choix == '3':
-        res, badHash = allFileExist(dataFile)
-        if res == True:
-            print('-->> all Files are Correct')
-        else:
-            print(str(len(res)) + ' files are not found')
-            for oneFile in res:
+                while not os.path.exists(fileToCheck) :
+                    fileToCheck = input('Enter the path to the file\n')
+                hashToCheck = SHAmulti(fileToCheck)
+                inDir = checkHash(allHash, hashToCheck)
+                print(hashToCheck + ' is in dir ? -> ' + str(inDir))
+        elif choix == '2':
+            loadAllHash()
+            createIndex(dataFile, pathToCheck, True)
+        elif choix == '3':
+            loadAllHash()
+            res, badHash, doublons = allFileExist(dataFile)
+            if res == True:
+                print('-->> all Files are Correct')
+            else:
+                print(str(len(res)) + ' files not found')
+                for oneFile in res:
+                    print(oneFile)
+                print(str(len(badHash)) + ' files hash not correct')
+                for oneFile in badHash:
+                    print(oneFile)
+                print(str(len(doublons)) + ' files are double')
+                for oneFile in doublons:
+                    print(oneFile)
+        elif choix == '4':
+            loadAllHash()
+            hashToCheck = input('Enter the Hash\n')
+            while len(hashToCheck) != 64:
+                hashToCheck = input('Enter the Hash\n')
+            listOfFiles = getter(dataFile, ['', '', '', hashToCheck])
+            for oneFile in listOfFiles:
                 print(oneFile)
-            print(str(len(badHash)) + ' files hash are not correct')
-            for oneFile in badHash:
-                print(oneFile)
-    elif choix == '4':
-        listOfFiles = getter(dataFile, ['', '', '', '42c67427a5cf2bb564899ddc77aaa97094ff4111a660a9c5dcbb00a5d59f8d88'])
-        for oneFile in listOfFiles:
-            print(oneFile)
-    elif choix == '5':
-        dirToAdd = input('Put the name of the directory\n')
-        while not os.path.exists(dirToAdd) :
-            dirToAdd = input("Put the name of the directory\n")
-        choixUser = choice(['1', '2'], ['Déplacer', 'Copier'])
+        elif choix == '5':
+            loadAllHash()
+            dirToAdd = input('Put the name of the directory\n')
+            while not os.path.exists(dirToAdd) :
+                dirToAdd = input("Put the name of the directory\n")
+            choixUser = choice(['1', '2'], ['Déplacer', 'Copier'])
+            if choixUser == '1':
+                print('Déplacement')
+                shutil.move(dirToAdd, pathToCheck, copy_function = shutil.copytree)
+            else :
+                print('Copie')
+                nameOfDir = os.path.basename(dirToAdd)
+                shutil.copytree(dirToAdd, pathToCheck + nameOfDir)
+        elif choix == '6':
+            pathToCheck = changeDir()
+        elif choix == '7':
+            dataFile = changeDataFile()
+        elif choix == '42':
+            stop = True
+            print('exited')
+    except KeyboardInterrupt:
+        choixUser = choice(['1', '2'], ['\nQuitter', 'Menu'])
         if choixUser == '1':
-            print('Déplacement')
-            shutil.move(dirToAdd, pathToCheck, copy_function = shutil.copytree)
-        else :
-            print('Copie')
-            nameOfDir = os.path.basename(dirToAdd)
-            shutil.copytree(dirToAdd, pathToCheck + nameOfDir)
-    elif choix == '6':
-        newPathDir = input('Put the name of the directory\n')
-        while not os.path.exists(newPathDir) :
-            newPathDir = input("Put the name of the directory\n")
-        pathToCheck = newPathDir
-    elif choix == '7':
-        newPathData = input('Put the name of the new file index\n')
-        while not os.path.exists(newPathData) :
-            newPathData = input("Put the name of the new file index\n")
-        dataFile = newPathData
-    elif choix == '42':
-        stop = True
-        print('exited')
-    
+            break
+        elif choixUser == '2':
+            pass
 
 
 
@@ -355,3 +451,7 @@ while not stop:
 
 
 
+# print(type(e).__name__)
+# print(e.__class__.__name__)
+# print(e.__class__.__qualname__)
+# print(e)
